@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .field-label {
+    @apply flex flex-col gap-1 text-sm text-slate-600;
+  }
+  .field-input {
+    @apply rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary;
+  }
+  .btn-primary {
+    @apply rounded-md bg-primary px-4 py-2 font-medium text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60;
+  }
+}
