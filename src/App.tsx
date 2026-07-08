@@ -57,7 +57,7 @@ function Layout({ children }: { children: ReactNode }) {
   const { user, isAdmin, logout } = useAuth();
   return (
     <div className="flex min-h-screen flex-col bg-slate-100">
-      <header className="flex flex-wrap items-center gap-6 bg-primary-dark px-6 py-3 text-white">
+      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-6 bg-primary-dark px-6 py-3 text-white shadow-md">
         <div className="text-lg font-bold">Incidencias KIRA</div>
         <nav className="flex flex-1 flex-wrap gap-2">
           <NavItem to="/">Inicio</NavItem>

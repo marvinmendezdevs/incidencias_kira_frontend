@@ -11,6 +11,7 @@ const ESTADOS: { value: Estado | ''; label: string }[] = [
   { value: 'nueva', label: 'Nueva' },
   { value: 'en_proceso', label: 'En proceso' },
   { value: 'resuelta', label: 'Resuelta' },
+  { value: 'no_aplica', label: 'No aplica' },
 ];
 
 const PRIORIDADES: { value: Prioridad | ''; label: string }[] = [
@@ -24,6 +25,7 @@ const ESTADO_COLOR: Record<Estado, string> = {
   nueva: 'bg-blue-600',
   en_proceso: 'bg-amber-600',
   resuelta: 'bg-green-600',
+  no_aplica: 'bg-slate-400',
 };
 
 const PRIORIDAD_COLOR: Record<Prioridad, string> = {

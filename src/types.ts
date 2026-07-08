@@ -37,7 +37,8 @@ export interface IncidentType {
   orden: number;
 }
 
-export type Estado = 'nueva' | 'en_proceso' | 'resuelta';
+// "no_aplica": para incidencias que no se pueden resolver.
+export type Estado = 'nueva' | 'en_proceso' | 'resuelta' | 'no_aplica';
 export type Prioridad = 'baja' | 'media' | 'alta';
 
 export interface Incident {
