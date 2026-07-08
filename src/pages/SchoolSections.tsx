@@ -4,6 +4,8 @@ import { api } from '../api';
 import type { School, Section } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon, SunIcon, MoonIcon, PlusIcon } from '../components/icons';
 
+const PAGE_SIZE = 5;
+
 function TurnoIcon({ period, className }: { period: string | null; className?: string }) {
   if ((period || '').toLowerCase() === 'vespertino') return <MoonIcon className={className} />;
   return <SunIcon className={className} />;
@@ -21,21 +23,41 @@ export default function SchoolSections() {
   const navigate = useNavigate();
   const [school, setSchool] = useState<School | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!code) return;
     setLoading(true);
     setError('');
-    Promise.all([api.school(code), api.sections(code)])
+    setPage(1);
+    Promise.all([api.school(code), api.sections(code, { page: 1, pageSize: PAGE_SIZE })])
       .then(([schoolData, sectionsData]) => {
         setSchool(schoolData.school);
         setSections(sectionsData.sections);
+        setTotal(sectionsData.total ?? sectionsData.sections.length);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [code]);
+
+  async function loadMore() {
+    if (!code) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const data = await api.sections(code, { page: nextPage, pageSize: PAGE_SIZE });
+      setSections((prev) => [...prev, ...data.sections]);
+      setPage(nextPage);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   // El backend ya ordena por grade/sectionLetter/subject/tipoClase. Aca
   // agrupamos en dos niveles: grado -> sección física (letra+turno) -> sus
@@ -155,6 +177,18 @@ export default function SchoolSections() {
           </div>
         ))}
       </div>
+
+      {!loading && sections.length < total && (
+        <div className="mt-6 flex justify-center">
+          <button
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={loadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? 'Cargando…' : `Cargar más (${sections.length} de ${total})`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

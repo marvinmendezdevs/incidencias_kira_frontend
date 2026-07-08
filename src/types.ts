@@ -72,9 +72,19 @@ export interface Incident {
 
 export interface ImportSummary {
   escuelas_creadas: number;
-  escuelas_actualizadas: number;
+  escuelas_existentes: number;
   secciones_creadas: number;
-  secciones_actualizadas: number;
+  secciones_existentes: number;
   total_escuelas_en_archivo: number;
   total_secciones_en_archivo: number;
+}
+
+export interface ManagedUser {
+  id: number;
+  email: string;
+  name: string | null;
+  role: Role;
+  activo: boolean;
+  last_login_at: string | null;
+  created_at: string;
 }

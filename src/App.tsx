@@ -8,6 +8,7 @@ import ReportForm from './pages/ReportForm';
 import IncidentsList from './pages/IncidentsList';
 import AdminImport from './pages/AdminImport';
 import IncidentTypesAdmin from './pages/IncidentTypesAdmin';
+import UsersAdmin from './pages/UsersAdmin';
 
 function LoginScreen() {
   const { loginWithGoogle } = useAuth();
@@ -65,6 +66,7 @@ function Layout({ children }: { children: ReactNode }) {
             <>
               <NavItem to="/admin/secciones">Importar secciones</NavItem>
               <NavItem to="/admin/tipos">Tipos de incidencia</NavItem>
+              <NavItem to="/admin/usuarios">Usuarios</NavItem>
             </>
           )}
         </nav>
@@ -117,6 +119,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <IncidentTypesAdmin />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/usuarios"
+          element={
+            <RequireAdmin>
+              <UsersAdmin />
             </RequireAdmin>
           }
         />

@@ -1,4 +1,4 @@
-import type { AuthUser, School, Section, IncidentType, Incident, ImportSummary } from './types';
+import type { AuthUser, School, Section, IncidentType, Incident, ImportSummary, ManagedUser } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -48,20 +48,45 @@ export interface IncidentsQuery {
   pageSize?: number;
 }
 
+export interface AdminUsersQuery {
+  q?: string;
+  role?: string;
+  activo?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 export const api = {
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
   loginWithGoogle: (idToken: string) =>
     request<{ user: AuthUser }>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
-  schools: (q = '') => request<{ schools: School[] }>(`/api/schools?q=${encodeURIComponent(q)}`),
+  schools: (q = '', page = 1, pageSize = 20) =>
+    request<{ schools: School[]; total: number; page: number; pageSize: number }>(
+      `/api/schools?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`
+    ),
   school: (code: string) => request<{ school: School }>(`/api/schools/${encodeURIComponent(code)}`),
   sections: (
     schoolCode: string,
-    filters: { q?: string; grade?: string; sectionLetter?: string; classPeriod?: string; id?: string } = {}
+    filters: {
+      q?: string;
+      grade?: string;
+      sectionLetter?: string;
+      classPeriod?: string;
+      id?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}
   ) => {
-    const params = new URLSearchParams({ schoolCode, ...filters } as Record<string, string>);
-    return request<{ sections: Section[] }>(`/api/sections?${params.toString()}`);
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries({ schoolCode, ...filters }).filter(([, v]) => v !== undefined && v !== '')
+      ) as Record<string, string>
+    );
+    return request<{ sections: Section[]; total?: number; page?: number; pageSize?: number }>(
+      `/api/sections?${params.toString()}`
+    );
   },
 
   incidentTypes: (includeInactive = false) =>
@@ -107,4 +132,18 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Error al importar.');
     return data;
   },
+
+  adminUsers: (params: AdminUsersQuery = {}) => {
+    const entries = Object.entries(params)
+      .filter(([, v]) => v !== '' && v !== undefined && v !== null)
+      .map(([k, v]) => [k, String(v)] as [string, string]);
+    const qs = new URLSearchParams(entries).toString();
+    return request<{ users: ManagedUser[]; total: number; page: number; pageSize: number }>(
+      `/api/admin/users${qs ? `?${qs}` : ''}`
+    );
+  },
+  createAdminUser: (payload: { email: string; name?: string; role?: string }) =>
+    request<{ user: ManagedUser }>('/api/admin/users', { method: 'POST', body: JSON.stringify(payload) }),
+  updateAdminUser: (id: number, payload: { activo?: boolean; role?: string }) =>
+    request<{ user: ManagedUser }>(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 };

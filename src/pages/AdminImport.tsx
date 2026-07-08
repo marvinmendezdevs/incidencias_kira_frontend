@@ -30,11 +30,11 @@ export default function AdminImport() {
   const rows: [string, number][] = result
     ? [
         ['Escuelas en el archivo', result.total_escuelas_en_archivo],
-        ['Escuelas nuevas', result.escuelas_creadas],
-        ['Escuelas actualizadas', result.escuelas_actualizadas],
+        ['Escuelas nuevas (agregadas)', result.escuelas_creadas],
+        ['Escuelas que ya existían (ignoradas)', result.escuelas_existentes],
         ['Secciones en el archivo', result.total_secciones_en_archivo],
-        ['Secciones nuevas', result.secciones_creadas],
-        ['Secciones actualizadas', result.secciones_actualizadas],
+        ['Secciones nuevas (agregadas)', result.secciones_creadas],
+        ['Secciones que ya existían (ignoradas)', result.secciones_existentes],
       ]
     : [];
 
@@ -42,8 +42,9 @@ export default function AdminImport() {
     <div>
       <h2 className="mb-4 text-xl font-bold text-primary-dark">Importar catálogo de secciones</h2>
       <p className="mb-4 text-slate-600">
-        Sube el archivo <code>sections.csv</code> más reciente que comparte KIRA para actualizar el catálogo de
-        escuelas y secciones. Las secciones existentes se actualizan y las nuevas se agregan; nada se borra.
+        Sube el archivo <code>sections.csv</code> más reciente que comparte KIRA. Solo se agregan las
+        escuelas/secciones que todavía no existen — las que ya están cargadas se ignoran por completo (no se
+        actualiza ni se borra nada).
       </p>
       <form onSubmit={handleSubmit} className="mb-5 flex items-center gap-3">
         <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />

@@ -2,24 +2,39 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import type { School } from '../types';
-import { SearchIcon, SchoolIcon, ChevronRightIcon } from '../components/icons';
+import { SearchIcon, SchoolIcon, ChevronRightIcon, ChevronLeftIcon } from '../components/icons';
+
+const PAGE_SIZE = 5;
 
 export default function Schools() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const [schools, setSchools] = useState<School[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // Si cambia la busqueda, siempre volvemos a la pagina 1 (si no, se puede
+  // quedar "atascado" en una pagina que ya no existe para el nuevo filtro).
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
 
   useEffect(() => {
     setLoading(true);
     const handle = setTimeout(() => {
       api
-        .schools(query)
-        .then((data) => setSchools(data.schools))
+        .schools(query, page, PAGE_SIZE)
+        .then((data) => {
+          setSchools(data.schools);
+          setTotal(data.total);
+        })
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [query, page]);
+
+  const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   return (
     <div>
@@ -74,6 +89,28 @@ export default function Schools() {
 
       {!loading && schools.length === 0 && (
         <p className="text-center text-slate-500">No se encontraron centros escolares con ese criterio.</p>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            disabled={page <= 1}
+          >
+            <ChevronLeftIcon className="h-4 w-4" /> Anterior
+          </button>
+          <span className="text-sm text-slate-500">
+            Página {page} de {totalPages} · {total} {total === 1 ? 'escuela' : 'escuelas'}
+          </span>
+          <button
+            className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+            disabled={page >= totalPages}
+          >
+            Siguiente <ChevronRightIcon className="h-4 w-4" />
+          </button>
+        </div>
       )}
     </div>
   );

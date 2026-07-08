@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import type { Incident, IncidentType, Estado, Prioridad } from '../types';
+import { ChevronLeftIcon, ChevronRightIcon } from '../components/icons';
+
+const PAGE_SIZE = 5;
 
 const ESTADOS: { value: Estado | ''; label: string }[] = [
   { value: '', label: 'Todos los estados' },
@@ -44,6 +47,7 @@ export default function IncidentsList() {
   const { isAdmin } = useAuth();
   const [types, setTypes] = useState<IncidentType[]>([]);
   const [filters, setFilters] = useState<Filters>({ estado: '', prioridad: '', tipo: '', q: '' });
+  const [page, setPage] = useState(1);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -53,13 +57,14 @@ export default function IncidentsList() {
     api.incidentTypes().then((data) => setTypes(data.incident_types));
   }, []);
 
-  async function load() {
+  async function load(pageToLoad = page) {
     setLoading(true);
     setError('');
     try {
-      const data = await api.incidents(filters);
+      const data = await api.incidents({ ...filters, page: pageToLoad, pageSize: PAGE_SIZE });
       setIncidents(data.incidents);
       setTotal(data.total);
+      setPage(pageToLoad);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -68,7 +73,7 @@ export default function IncidentsList() {
   }
 
   useEffect(() => {
-    load();
+    load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.estado, filters.prioridad, filters.tipo]);
 
@@ -80,6 +85,8 @@ export default function IncidentsList() {
       setError((err as Error).message);
     }
   }
+
+  const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   return (
     <div>
@@ -126,9 +133,9 @@ export default function IncidentsList() {
           placeholder="Buscar en descripción, docente, estudiantes…"
           value={filters.q}
           onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-          onKeyDown={(e) => e.key === 'Enter' && load()}
+          onKeyDown={(e) => e.key === 'Enter' && load(1)}
         />
-        <button className="btn-primary" onClick={load}>
+        <button className="btn-primary" onClick={() => load(1)}>
           Buscar
         </button>
       </div>
@@ -149,6 +156,7 @@ export default function IncidentsList() {
             <div className="space-y-1 text-sm">
               <p>
                 <strong>{inc.school_name}</strong>
+                <span className="text-slate-400"> ({inc.school_code})</span>
                 {inc.grade && ` · ${inc.grade}`}
                 {inc.section_letter && ` · Sección ${inc.section_letter}`}
                 {inc.class_period && ` · ${inc.class_period}`}
@@ -210,6 +218,28 @@ export default function IncidentsList() {
         ))}
         {!loading && incidents.length === 0 && <p>No hay incidencias con estos filtros.</p>}
       </div>
+
+      {!loading && totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => load(Math.max(page - 1, 1))}
+            disabled={page <= 1}
+          >
+            <ChevronLeftIcon className="h-4 w-4" /> Anterior
+          </button>
+          <span className="text-sm text-slate-500">
+            Página {page} de {totalPages} · {total} {total === 1 ? 'incidencia' : 'incidencias'}
+          </span>
+          <button
+            className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => load(Math.min(page + 1, totalPages))}
+            disabled={page >= totalPages}
+          >
+            Siguiente <ChevronRightIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
