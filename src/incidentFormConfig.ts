@@ -1,6 +1,10 @@
 // Configura, por tipo de incidencia (segun su "nombre" en la base de datos),
 // que campos mostrar en el formulario y como se llaman/que placeholder tienen.
 // Esto evita mostrar siempre el mismo formulario generico sin importar el tipo.
+//
+// Solo hace falta configuracion para los tipos ACTIVOS (los que de verdad se
+// pueden reportar); los desactivados nunca llegan al formulario, asi que no
+// necesitan entrada aca.
 
 export type FormMode =
   | 'simple' // solo un motivo/descripcion
@@ -17,6 +21,8 @@ export interface IncidentFormConfig {
   motivoRequired: boolean;
   estudiantesButtonLabel?: string;
   estudiantePlaceholder?: string;
+  estudiantesMinimo?: number;
+  estudiantesHint?: string;
   estudianteLabel?: string;
   docenteLabel?: string;
   docentePlaceholder?: string;
@@ -34,69 +40,18 @@ export const DEFAULT_FORM_CONFIG: IncidentFormConfig = {
 };
 
 export const FORM_CONFIG_BY_NOMBRE: Record<string, IncidentFormConfig> = {
-  'Faltan estudiantes en la sección': {
-    mode: 'simple',
-    motivoLabel: '¿Qué está pasando?',
-    motivoPlaceholder: 'Ej. Solo hay 15 de 30 estudiantes matriculados en esta sección…',
-    motivoRequired: true,
-  },
-  'Matricular estudiantes en la sección': {
+  'Agregar lista de estudiantes': {
     mode: 'estudiantes',
     motivoLabel: 'Nota adicional (opcional)',
     motivoPlaceholder: 'Cualquier detalle adicional que ayude a matricularlos…',
     motivoRequired: false,
     estudiantesButtonLabel: '+ Agregar estudiante',
     estudiantePlaceholder: 'Nombre completo del estudiante',
+    estudiantesMinimo: 11,
+    estudiantesHint:
+      'Este tipo es solo para listas de 11 estudiantes o más. Si son menos de 11, el centro escolar puede matricularlos directamente en KIRA.',
   },
-  'Eliminar estudiantes de una sección': {
-    mode: 'estudiantes',
-    motivoLabel: 'Motivo (opcional)',
-    motivoPlaceholder: 'Ej. Se trasladaron a otra escuela, están duplicados…',
-    motivoRequired: false,
-    estudiantesButtonLabel: '+ Agregar estudiante a retirar',
-    estudiantePlaceholder: 'Nombre completo del estudiante',
-  },
-  'Corregir datos de un estudiante': {
-    mode: 'estudiante_corregir',
-    motivoLabel: '¿Qué dato hay que corregir?',
-    motivoPlaceholder: 'Ej. El correo está mal escrito, debería ser…',
-    motivoRequired: true,
-    estudianteLabel: 'Nombre del estudiante',
-    estudiantePlaceholder: 'Nombre completo del estudiante',
-  },
-  'Falta docente en la sección': {
-    mode: 'simple',
-    motivoLabel: '¿Qué está pasando?',
-    motivoPlaceholder: 'Ej. La sección no tiene ningún docente asignado desde hace 2 semanas…',
-    motivoRequired: true,
-  },
-  'Cambiar docente de una sección a otra': {
-    mode: 'docente_cambio',
-    motivoLabel: 'Nota adicional (opcional)',
-    motivoPlaceholder: 'Cualquier detalle adicional…',
-    motivoRequired: false,
-    docenteLabel: 'Nombre del docente actual',
-    docentePlaceholder: 'Nombre completo del docente',
-    destinoLabel: '¿A qué sección/turno lo vas a mover?',
-    destinoPlaceholder: 'Ej. 3er Grado, Sección B, Vespertino',
-  },
-  'Eliminar docente de una sección': {
-    mode: 'docente',
-    motivoLabel: 'Motivo',
-    motivoPlaceholder: '¿Por qué hay que retirar a este docente de la sección?',
-    motivoRequired: true,
-    docenteLabel: 'Nombre del docente a retirar',
-    docentePlaceholder: 'Nombre completo del docente',
-  },
-  'Docente con problemas de acceso a la plataforma': {
-    mode: 'docente',
-    motivoLabel: 'Describe el problema',
-    motivoPlaceholder: 'Ej. El correo registrado en KIRA está mal escrito, debería ser…',
-    motivoRequired: true,
-    docenteLabel: 'Nombre del docente',
-    docentePlaceholder: 'Nombre completo del docente',
-  },
-  'Agregar sección nueva': {
+  'Crear sección': {
     mode: 'simple',
     motivoLabel: 'Describe la sección nueva',
     motivoPlaceholder: 'Grado, letra, turno y materia(s), y por qué hace falta…',

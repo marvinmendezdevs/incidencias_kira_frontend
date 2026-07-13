@@ -138,6 +138,15 @@ export default function ReportForm() {
         if (conAlgo.some((e) => !e.nombre.trim() || !e.nie.trim())) {
           return 'Completa el nombre y el NIE de cada estudiante que agregaste.';
         }
+        // Este tipo es solo para listas grandes (11+); con menos, el centro
+        // escolar lo puede hacer directamente en KIRA sin pasar por aca.
+        const minimo = formConfig.estudiantesMinimo ?? 1;
+        if (conAlgo.length < minimo) {
+          return (
+            formConfig.estudiantesHint ||
+            `Agrega al menos ${minimo} estudiantes (llevas ${conAlgo.length}).`
+          );
+        }
         break;
       }
       case 'estudiante_corregir':
@@ -300,6 +309,9 @@ export default function ReportForm() {
             {formConfig.mode === 'estudiantes' && (
               <div className="mb-3">
                 <div className="field-label mb-1">Estudiantes (nombre y NIE)</div>
+                {formConfig.estudiantesHint && (
+                  <p className="mb-2 text-xs text-slate-500">{formConfig.estudiantesHint}</p>
+                )}
                 <div className="flex flex-col gap-2">
                   {estudiantesList.map((entry, i) => (
                     <div key={i} className="flex gap-2">
@@ -335,6 +347,12 @@ export default function ReportForm() {
                 >
                   <PlusIcon className="h-4 w-4" /> {formConfig.estudiantesButtonLabel || 'Agregar estudiante'}
                 </button>
+                {formConfig.estudiantesMinimo && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Llevas {estudiantesList.filter((e) => e.nombre.trim() || e.nie.trim()).length} de{' '}
+                    {formConfig.estudiantesMinimo} estudiantes mínimo.
+                  </p>
+                )}
               </div>
             )}
 
