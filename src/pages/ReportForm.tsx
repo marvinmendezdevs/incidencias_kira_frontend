@@ -78,8 +78,18 @@ export default function ReportForm() {
       .finally(() => setClassLoading(false));
   }, [nuevaSeccion, schoolCode, sectionId]);
 
+  // "Crear sección" es el UNICO tipo pensado para el flujo de "sección
+  // nueva" (cuando todavia no existe la sección en KIRA, asi que no hay
+  // seccion que seleccionar). Los tipos de contenido tambien tienen
+  // requiere_seccion: false (no exigen amarrar una seccion puntual), pero
+  // SI se reportan desde una seccion existente, igual que "Eliminar
+  // sección" y "Agregar lista de estudiantes". Por eso no podemos filtrar
+  // solo por requiere_seccion: separamos explicitamente por nombre.
   const availableTypes = useMemo(
-    () => types.filter((t) => t.requiere_seccion === !nuevaSeccion),
+    () =>
+      nuevaSeccion
+        ? types.filter((t) => t.nombre === 'Crear sección')
+        : types.filter((t) => t.nombre !== 'Crear sección'),
     [types, nuevaSeccion]
   );
 
