@@ -47,9 +47,9 @@ export const FORM_CONFIG_BY_NOMBRE: Record<string, IncidentFormConfig> = {
     motivoRequired: false,
     estudiantesButtonLabel: '+ Agregar estudiante',
     estudiantePlaceholder: 'Nombre completo del estudiante',
-    estudiantesMinimo: 11,
+    estudiantesMinimo: 25,
     estudiantesHint:
-      'Este tipo es solo para listas de 11 estudiantes o más. Si son menos de 11, el centro escolar puede matricularlos directamente en KIRA.',
+      'Este tipo es solo para listas de 25 estudiantes o más. Si son menos de 25, el centro escolar puede matricularlos directamente en KIRA.',
   },
   'Crear sección': {
     mode: 'simple',
