@@ -38,9 +38,12 @@ export interface UpdateIncidentPayload {
 
 export interface IncidentsQuery {
   escuela?: string;
+  escuelaNombre?: string;
   tipo?: string;
   estado?: string;
   prioridad?: string;
+  turno?: string;
+  motivo?: string;
   q?: string;
   desde?: string;
   hasta?: string;

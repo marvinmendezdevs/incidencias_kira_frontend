@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import type { Incident, IncidentType, Estado, Prioridad } from '../types';
@@ -21,6 +21,12 @@ const PRIORIDADES: { value: Prioridad | ''; label: string }[] = [
   { value: 'alta', label: 'Alta' },
 ];
 
+const TURNOS = [
+  { value: '', label: 'Todos los turnos' },
+  { value: 'Matutino', label: 'Matutino' },
+  { value: 'Vespertino', label: 'Vespertino' },
+];
+
 const ESTADO_COLOR: Record<Estado, string> = {
   nueva: 'bg-blue-600',
   en_proceso: 'bg-amber-600',
@@ -35,35 +41,56 @@ const PRIORIDAD_COLOR: Record<Prioridad, string> = {
 };
 
 function Badge({ color, children }: { color: string; children: React.ReactNode }) {
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs capitalize text-white ${color}`}>{children}</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-xs capitalize text-white ${color}`}>
+      {children}
+    </span>
+  );
 }
 
 interface Filters {
   estado: string;
   prioridad: string;
   tipo: string;
+  turno: string;
+  escuelaNombre: string;
+  motivo: string;
   q: string;
 }
+
+const EMPTY_FILTERS: Filters = {
+  estado: '',
+  prioridad: '',
+  tipo: '',
+  turno: '',
+  escuelaNombre: '',
+  motivo: '',
+  q: '',
+};
 
 export default function IncidentsList() {
   const { isAdmin } = useAuth();
   const [types, setTypes] = useState<IncidentType[]>([]);
-  const [filters, setFilters] = useState<Filters>({ estado: '', prioridad: '', tipo: '', q: '' });
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Debounce ref para búsqueda en vivo
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     api.incidentTypes().then((data) => setTypes(data.incident_types));
   }, []);
 
-  async function load(pageToLoad = page) {
+  async function load(pageToLoad = page, currentFilters = filters) {
     setLoading(true);
     setError('');
     try {
-      const data = await api.incidents({ ...filters, page: pageToLoad, pageSize: PAGE_SIZE });
+      const data = await api.incidents({ ...currentFilters, page: pageToLoad, pageSize: PAGE_SIZE });
       setIncidents(data.incidents);
       setTotal(data.total);
       setPage(pageToLoad);
@@ -74,10 +101,20 @@ export default function IncidentsList() {
     }
   }
 
-  useEffect(() => {
-    load(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.estado, filters.prioridad, filters.tipo]);
+  // Filtros de selección (dropdown) → recarga inmediata
+  function setSelectFilter(key: keyof Filters, value: string) {
+    const next = { ...filters, [key]: value };
+    setFilters(next);
+    load(1, next);
+  }
+
+  // Campos de texto → debounce 400 ms
+  function setTextFilter(key: keyof Filters, value: string) {
+    const next = { ...filters, [key]: value };
+    setFilters(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(1, next), 400);
+  }
 
   async function handleUpdate(id: number, payload: { estado?: string; prioridad?: string }) {
     try {
@@ -88,17 +125,48 @@ export default function IncidentsList() {
     }
   }
 
+  function clearFilters() {
+    setFilters(EMPTY_FILTERS);
+    load(1, EMPTY_FILTERS);
+  }
+
+  const hasActiveFilters = Object.values(filters).some((v) => v !== '');
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold text-primary-dark">Incidencias ({total})</h2>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-primary-dark">
+          Incidencias{' '}
+          <span className="text-base font-normal text-slate-400">({total})</span>
+        </h2>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="text-sm font-medium text-slate-400 hover:text-red-500"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      {/* ── Barra de búsqueda principal ── */}
+      <div className="mb-3">
+        <input
+          type="text"
+          className="field-input w-full"
+          placeholder="Buscar por motivo, contenido, tipo de incidencia, nombre o correo del reportante…"
+          value={filters.q}
+          onChange={(e) => setTextFilter('q', e.target.value)}
+        />
+      </div>
+
+      {/* ── Filtros rápidos (fila 1) ── */}
+      <div className="mb-2 flex flex-wrap gap-2">
         <select
           className="field-input"
           value={filters.tipo}
-          onChange={(e) => setFilters((f) => ({ ...f, tipo: e.target.value }))}
+          onChange={(e) => setSelectFilter('tipo', e.target.value)}
         >
           <option value="">Todos los tipos</option>
           {types.map((t) => (
@@ -110,7 +178,7 @@ export default function IncidentsList() {
         <select
           className="field-input"
           value={filters.estado}
-          onChange={(e) => setFilters((f) => ({ ...f, estado: e.target.value }))}
+          onChange={(e) => setSelectFilter('estado', e.target.value)}
         >
           {ESTADOS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -121,7 +189,7 @@ export default function IncidentsList() {
         <select
           className="field-input"
           value={filters.prioridad}
-          onChange={(e) => setFilters((f) => ({ ...f, prioridad: e.target.value }))}
+          onChange={(e) => setSelectFilter('prioridad', e.target.value)}
         >
           {PRIORIDADES.map((o) => (
             <option key={o.value} value={o.value}>
@@ -129,69 +197,128 @@ export default function IncidentsList() {
             </option>
           ))}
         </select>
-        <input
-          type="text"
-          className="field-input min-w-[220px] flex-1"
-          placeholder="Buscar en descripción, docente, estudiantes…"
-          value={filters.q}
-          onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-          onKeyDown={(e) => e.key === 'Enter' && load(1)}
-        />
-        <button className="btn-primary" onClick={() => load(1)}>
-          Buscar
+        <button
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/40 hover:text-primary"
+          onClick={() => setShowAdvanced((v) => !v)}
+        >
+          {showAdvanced ? 'Ocultar filtros ▲' : 'Más filtros ▼'}
         </button>
       </div>
 
-      {error && <p className="font-medium text-red-600">{error}</p>}
-      {loading && <p>Cargando…</p>}
+      {/* ── Filtros avanzados ── */}
+      {showAdvanced && (
+        <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+          <select
+            className="field-input"
+            value={filters.turno}
+            onChange={(e) => setSelectFilter('turno', e.target.value)}
+          >
+            {TURNOS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            className="field-input min-w-[200px] flex-1"
+            placeholder="Filtrar por complejo educativo…"
+            value={filters.escuelaNombre}
+            onChange={(e) => setTextFilter('escuelaNombre', e.target.value)}
+          />
+          <input
+            type="text"
+            className="field-input min-w-[200px] flex-1"
+            placeholder="Filtrar por motivo…"
+            value={filters.motivo}
+            onChange={(e) => setTextFilter('motivo', e.target.value)}
+          />
+        </div>
+      )}
 
+      {error && <p className="mb-2 font-medium text-red-600">{error}</p>}
+      {loading && <p className="text-sm text-slate-400">Cargando…</p>}
+
+      {/* ── Tarjetas de incidencias ── */}
       <div className="flex flex-col gap-3">
         {incidents.map((inc) => (
           <div key={inc.id} className="rounded-xl bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <strong>{inc.tipo_nombre}</strong>
-              <div className="flex gap-1.5">
-                <Badge color={ESTADO_COLOR[inc.estado]}>{inc.estado.replace('_', ' ')}</Badge>
+
+            {/* Encabezado: tipo + badges */}
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <h3 className="text-base font-bold text-slate-800">{inc.tipo_nombre}</h3>
+              <div className="flex shrink-0 flex-wrap gap-1.5">
+                <Badge color={ESTADO_COLOR[inc.estado]}>
+                  {inc.estado.replace('_', ' ')}
+                </Badge>
                 <Badge color={PRIORIDAD_COLOR[inc.prioridad]}>{inc.prioridad}</Badge>
               </div>
             </div>
-            <div className="space-y-1 text-sm">
-              <p>
-                <strong>{inc.school_name}</strong>
-                <span className="text-slate-400"> ({inc.school_code})</span>
-                {inc.grade && ` · ${inc.grade}`}
-                {inc.section_letter && ` · Sección ${inc.section_letter}`}
-                {inc.class_period && ` · ${inc.class_period}`}
-                {(inc.tipo_clase || inc.subject) && ` · ${inc.tipo_clase || 'Clase'} ${inc.subject || ''}`}
-              </p>
-              <p className="rounded-lg bg-slate-50 px-3 py-2">
-                <strong className="text-slate-700">Motivo:</strong> {inc.descripcion}
-              </p>
-              {inc.docente_nombre && (
-                <p>
-                  <strong>Docente:</strong> {inc.docente_nombre}
-                  {inc.docente_email && ` · ${inc.docente_email}`}
-                  {inc.docente_telefono && ` · Tel: ${inc.docente_telefono}`}
-                  {inc.docente_dui && ` · DUI: ${inc.docente_dui}`}
-                </p>
+
+            {/* Metadata del aula */}
+            <div className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <p className="font-semibold">{inc.school_name}</p>
+              <p className="text-xs text-slate-400">ID: {inc.school_code}</p>
+              {(inc.grade || inc.section_letter || inc.class_period || inc.subject) && (
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                  {inc.grade && <span>Grado: <strong className="text-slate-700">{inc.grade}</strong></span>}
+                  {inc.section_letter && <span>Sección: <strong className="text-slate-700">{inc.section_letter}</strong></span>}
+                  {inc.class_period && <span>Turno: <strong className="text-slate-700">{inc.class_period}</strong></span>}
+                  {(inc.tipo_clase || inc.subject) && (
+                    <span>Clase: <strong className="text-slate-700">{[inc.tipo_clase, inc.subject].filter(Boolean).join(' – ')}</strong></span>
+                  )}
+                </div>
               )}
-              {inc.estudiantes && (
-                <p>
-                  <strong>Estudiantes:</strong> {inc.estudiantes}
-                </p>
-              )}
-              {inc.contenido_detalle && (
-                <p>
-                  <strong>Contenido:</strong> {inc.contenido_detalle}
-                </p>
-              )}
-              <p className="text-slate-500">
-                Reportado por {inc.reportante_nombre || inc.reportante_email} el{' '}
-                {new Date(inc.created_at).toLocaleString('es-SV')}
-              </p>
             </div>
+
+            {/* Motivo */}
+            <div className="mb-2 text-sm">
+              <span className="font-semibold text-slate-700">Motivo: </span>
+              <span className="text-slate-800">{inc.descripcion}</span>
+            </div>
+
+            {/* Contenido / Descripción */}
+            {inc.contenido_detalle && (
+              <div className="mb-2 text-sm">
+                <span className="font-semibold text-slate-700">Contenido / Descripción: </span>
+                <span className="text-slate-800">{inc.contenido_detalle}</span>
+              </div>
+            )}
+
+            {/* Info complementaria (docente / estudiantes) */}
+            {inc.docente_nombre && (
+              <p className="mb-1 text-sm">
+                <strong>Docente:</strong> {inc.docente_nombre}
+                {inc.docente_email && ` · ${inc.docente_email}`}
+                {inc.docente_telefono && ` · Tel: ${inc.docente_telefono}`}
+                {inc.docente_dui && ` · DUI: ${inc.docente_dui}`}
+              </p>
+            )}
+            {inc.estudiantes && (
+              <p className="mb-1 text-sm">
+                <strong>Estudiantes:</strong> {inc.estudiantes}
+              </p>
+            )}
+
+            {/* Reportado por */}
+            <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-400">
+              Reportado por{' '}
+              <span className="font-medium text-slate-600">
+                {inc.reportante_nombre || inc.reportante_email}
+              </span>
+              {inc.reportante_nombre && inc.reportante_email && (
+                <> · <span>{inc.reportante_email}</span></>
+              )}
+              {' · '}
+              {new Date(inc.created_at).toLocaleString('es-SV', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+            </p>
+
+            {/* Dropdowns de admin */}
             {isAdmin && (
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                 <select
                   className="field-input"
                   value={inc.estado}
@@ -218,9 +345,12 @@ export default function IncidentsList() {
             )}
           </div>
         ))}
-        {!loading && incidents.length === 0 && <p>No hay incidencias con estos filtros.</p>}
+        {!loading && incidents.length === 0 && (
+          <p className="text-center text-sm text-slate-400">No hay incidencias con estos filtros.</p>
+        )}
       </div>
 
+      {/* Paginación */}
       {!loading && totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
@@ -231,7 +361,8 @@ export default function IncidentsList() {
             <ChevronLeftIcon className="h-4 w-4" /> Anterior
           </button>
           <span className="text-sm text-slate-500">
-            Página {page} de {totalPages} · {total} {total === 1 ? 'incidencia' : 'incidencias'}
+            Página {page} de {totalPages} · {total}{' '}
+            {total === 1 ? 'incidencia' : 'incidencias'}
           </span>
           <button
             className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
