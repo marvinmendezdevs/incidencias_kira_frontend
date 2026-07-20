@@ -86,6 +86,12 @@ export default function IncidentsList() {
     api.incidentTypes().then((data) => setTypes(data.incident_types));
   }, []);
 
+  // Carga inicial al montar el componente
+  useEffect(() => {
+    load(1, EMPTY_FILTERS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function load(pageToLoad = page, currentFilters = filters) {
     setLoading(true);
     setError('');
