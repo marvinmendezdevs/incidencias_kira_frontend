@@ -152,13 +152,24 @@ export const api = {
     request<{
       processed: number;
       failed: number;
-      markedNoAplica: number;
+      noAplica: number;
       nextAfterId: number;
       hasMore: boolean;
+      halted: boolean;
+      errorReason: string | null;
+      retryAt: string | null;
     }>('/api/incidents/bulk-classify-new', {
       method: 'POST',
       body: JSON.stringify({ filters, afterId, batchSize: 10 }),
     }),
+  incidentAnalysisStatus: (filters: IncidentsQuery) => {
+    const entries = Object.entries(filters)
+      .filter(([, value]) => value !== '' && value !== undefined && value !== null)
+      .map(([key, value]) => [key, String(value)] as [string, string]);
+    return request<{ total: number; analyzed: number; pending: number; ready: boolean }>(
+      `/api/incidents/analysis-status?${new URLSearchParams(entries).toString()}`
+    );
+  },
   downloadApplicableNewIncidents: async (filters: IncidentsQuery) => {
     const entries = Object.entries(filters)
       .filter(([, value]) => value !== '' && value !== undefined && value !== null)
@@ -175,7 +186,7 @@ export const api = {
     }
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';
-    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] || 'incidencias-nuevas-aplican.csv';
+    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] || 'analisis-incidencias.xlsx';
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;

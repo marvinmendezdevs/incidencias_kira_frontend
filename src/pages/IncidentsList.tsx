@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
-import type { ClasificacionIncidencia, Incident, IncidentType, Estado, Prioridad } from '../types';
+import type { Incident, IncidentType, Estado, Prioridad } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from '../components/icons';
 
 const PAGE_SIZE = 5;
@@ -78,10 +78,10 @@ export default function IncidentsList() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState({ total: 0, analyzed: 0, pending: 0, ready: false });
 
   // Debounce ref para búsqueda en vivo
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,9 +100,15 @@ export default function IncidentsList() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.incidents({ ...currentFilters, page: pageToLoad, pageSize: PAGE_SIZE });
+      const [data, status] = await Promise.all([
+        api.incidents({ ...currentFilters, page: pageToLoad, pageSize: PAGE_SIZE }),
+        isAdmin
+          ? api.incidentAnalysisStatus({ ...currentFilters, estado: 'nueva' })
+          : Promise.resolve({ total: 0, analyzed: 0, pending: 0, ready: false }),
+      ]);
       setIncidents(data.incidents);
       setTotal(data.total);
+      setAnalysisStatus(status);
       setPage(pageToLoad);
     } catch (err) {
       setError((err as Error).message);
@@ -135,23 +141,6 @@ export default function IncidentsList() {
     }
   }
 
-  async function handleReview(
-    incident: Incident,
-    clasificacion: ClasificacionIncidencia,
-    tipoIncidenciaId: number | null
-  ) {
-    setReviewingId(incident.id);
-    setError('');
-    try {
-      await api.reviewIncidentClassification(incident.id, { clasificacion, tipoIncidenciaId });
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setReviewingId(null);
-    }
-  }
-
   async function handleBulkClassify() {
     setBulkAnalyzing(true);
     setError('');
@@ -159,23 +148,35 @@ export default function IncidentsList() {
     let afterId = 0;
     let processed = 0;
     let failed = 0;
-    let markedNoAplica = 0;
+    let noAplica = 0;
     try {
       let hasMore = false;
       do {
         const result = await api.bulkClassifyNewIncidents({ ...filters, estado: 'nueva' }, afterId);
         processed += result.processed;
         failed += result.failed;
-        markedNoAplica += result.markedNoAplica;
+        noAplica += result.noAplica;
         afterId = result.nextAfterId;
         hasMore = result.hasMore;
         setBulkProgress(
-          `Analizadas: ${processed} · No aplican: ${markedNoAplica}${failed ? ` · Errores: ${failed}` : ''}`
+          `Analizadas: ${processed} · Resultado No aplica: ${noAplica}${failed ? ` · Errores: ${failed}` : ''}`
         );
+        if (result.halted) {
+          const retryMessage = result.retryAt
+            ? ` Intenta nuevamente a las ${new Date(result.retryAt).toLocaleTimeString('es-SV', {
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+              })}.`
+            : '';
+          throw new Error(
+            `${result.errorReason || 'El análisis se detuvo por un error general de Gemini.'}${retryMessage}`
+          );
+        }
       } while (hasMore);
       await load(1, filters);
       setBulkProgress(
-        `Análisis finalizado: ${processed} procesadas, ${markedNoAplica} marcadas como No aplica${
+        `Análisis finalizado: ${processed} procesadas; ${noAplica} dieron como resultado No aplica${
           failed ? ` y ${failed} con error` : ''
         }.`
       );
@@ -321,15 +322,19 @@ export default function IncidentsList() {
             </button>
             <button
               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={bulkAnalyzing || exporting}
+              disabled={bulkAnalyzing || exporting || !analysisStatus.ready}
               onClick={handleExcelDownload}
             >
-              {exporting ? 'Generando Excel…' : 'Descargar Excel · Nuevas que aplican'}
+              {exporting ? 'Generando Excel…' : 'Descargar Excel · Aplican y no aplican'}
             </button>
           </div>
           {bulkProgress && <p className="mt-2 text-sm text-slate-600">{bulkProgress}</p>}
+          <p className="mt-2 text-sm text-slate-600">
+            Analizadas: {analysisStatus.analyzed} de {analysisStatus.total}
+            {analysisStatus.pending > 0 && ` · Pendientes: ${analysisStatus.pending}`}
+          </p>
           <p className="mt-1 text-xs text-slate-400">
-            La IA cambia a No aplica únicamente los casos fuera de alcance. Los demás permanecen como Nuevas.
+            El análisis solo informa si aplica o no aplica y por qué; no modifica las incidencias. La descarga se habilita al finalizar todos los registros.
           </p>
         </div>
       )}
@@ -423,54 +428,17 @@ export default function IncidentsList() {
                   {inc.ai_classification && (
                     <div className="mt-2 text-slate-700">
                       <p>
-                        <span className="font-bold text-indigo-800">{inc.ai_classification.replace('_', ' ')}</span>
+                        <span className="font-bold text-indigo-800">
+                          {inc.ai_classification === 'APLICA'
+                            ? 'APLICA'
+                            : inc.ai_classification === 'NO_APLICA'
+                              ? 'NO APLICA'
+                              : 'PENDIENTE DE NUEVO ANÁLISIS'}
+                        </span>
                         {inc.ai_confidence != null && ` · ${Math.round(inc.ai_confidence * 100)}% de confianza`}
                       </p>
                       {inc.ai_incident_type && <p>Tipo sugerido: <strong>{inc.ai_incident_type}</strong></p>}
-                      {inc.ai_reason && <p className="mt-1">{inc.ai_reason}</p>}
-
-                      {inc.ai_reviewed ? (
-                        <div className="mt-2 rounded-md bg-emerald-100 px-2 py-1.5 text-emerald-800">
-                          Revisión humana: <strong>{inc.human_classification?.replace('_', ' ')}</strong>
-                          {inc.human_incident_type && ` · ${inc.human_incident_type}`}
-                        </div>
-                      ) : (
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <button
-                            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                            disabled={reviewingId === inc.id}
-                            onClick={() =>
-                              handleReview(inc, inc.ai_classification!, inc.ai_incident_type_id)
-                            }
-                          >
-                            Confirmar recomendación
-                          </button>
-                          <select
-                            className="field-input text-xs"
-                            defaultValue=""
-                            disabled={reviewingId === inc.id}
-                            onChange={(event) => {
-                              const [classification, typeId] = event.target.value.split(':');
-                              if (!classification) return;
-                              handleReview(
-                                inc,
-                                classification as ClasificacionIncidencia,
-                                typeId ? Number(typeId) : null
-                              );
-                              event.target.value = '';
-                            }}
-                          >
-                            <option value="">Corregir decisión…</option>
-                            <option value="NO_APLICA:">NO APLICA</option>
-                            <option value="REQUIERE_REVISION:">REQUIERE REVISIÓN</option>
-                            {types.map((type) => (
-                              <option key={type.id} value={`APLICA:${type.id}`}>
-                                APLICA · {type.nombre}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                      {inc.ai_reason && <p className="mt-1"><strong>Por qué:</strong> {inc.ai_reason}</p>}
                     </div>
                   )}
                   {!inc.ai_classification && (
