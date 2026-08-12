@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
-import type { Incident, IncidentType, Estado, Prioridad } from '../types';
+import type { ClasificacionIncidencia, Incident, IncidentType, Estado, Prioridad } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from '../components/icons';
 
 const PAGE_SIZE = 5;
@@ -78,6 +78,10 @@ export default function IncidentsList() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [reviewingId, setReviewingId] = useState<number | null>(null);
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   // Debounce ref para búsqueda en vivo
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,6 +132,69 @@ export default function IncidentsList() {
       load();
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  async function handleReview(
+    incident: Incident,
+    clasificacion: ClasificacionIncidencia,
+    tipoIncidenciaId: number | null
+  ) {
+    setReviewingId(incident.id);
+    setError('');
+    try {
+      await api.reviewIncidentClassification(incident.id, { clasificacion, tipoIncidenciaId });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
+  async function handleBulkClassify() {
+    setBulkAnalyzing(true);
+    setError('');
+    setBulkProgress('Preparando análisis…');
+    let afterId = 0;
+    let processed = 0;
+    let failed = 0;
+    let markedNoAplica = 0;
+    try {
+      let hasMore = false;
+      do {
+        const result = await api.bulkClassifyNewIncidents({ ...filters, estado: 'nueva' }, afterId);
+        processed += result.processed;
+        failed += result.failed;
+        markedNoAplica += result.markedNoAplica;
+        afterId = result.nextAfterId;
+        hasMore = result.hasMore;
+        setBulkProgress(
+          `Analizadas: ${processed} · No aplican: ${markedNoAplica}${failed ? ` · Errores: ${failed}` : ''}`
+        );
+      } while (hasMore);
+      await load(1, filters);
+      setBulkProgress(
+        `Análisis finalizado: ${processed} procesadas, ${markedNoAplica} marcadas como No aplica${
+          failed ? ` y ${failed} con error` : ''
+        }.`
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBulkAnalyzing(false);
+    }
+  }
+
+  async function handleExcelDownload() {
+    setExporting(true);
+    setError('');
+    try {
+      await api.downloadApplicableNewIncidents({ ...filters, estado: 'nueva' });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -242,6 +309,31 @@ export default function IncidentsList() {
         </div>
       )}
 
+      {isAdmin && filters.estado === 'nueva' && (
+        <div className="mb-4 rounded-xl border border-indigo-100 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={bulkAnalyzing}
+              onClick={handleBulkClassify}
+            >
+              {bulkAnalyzing ? 'Analizando nuevas…' : 'Analizar todas las nuevas con IA'}
+            </button>
+            <button
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={bulkAnalyzing || exporting}
+              onClick={handleExcelDownload}
+            >
+              {exporting ? 'Generando Excel…' : 'Descargar Excel · Nuevas que aplican'}
+            </button>
+          </div>
+          {bulkProgress && <p className="mt-2 text-sm text-slate-600">{bulkProgress}</p>}
+          <p className="mt-1 text-xs text-slate-400">
+            La IA cambia a No aplica únicamente los casos fuera de alcance. Los demás permanecen como Nuevas.
+          </p>
+        </div>
+      )}
+
       {error && <p className="mb-2 font-medium text-red-600">{error}</p>}
       {loading && <p className="text-sm text-slate-400">Cargando…</p>}
 
@@ -324,7 +416,71 @@ export default function IncidentsList() {
 
             {/* Dropdowns de admin */}
             {isAdmin && (
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm">
+                  <strong className="text-indigo-900">Clasificación con IA</strong>
+
+                  {inc.ai_classification && (
+                    <div className="mt-2 text-slate-700">
+                      <p>
+                        <span className="font-bold text-indigo-800">{inc.ai_classification.replace('_', ' ')}</span>
+                        {inc.ai_confidence != null && ` · ${Math.round(inc.ai_confidence * 100)}% de confianza`}
+                      </p>
+                      {inc.ai_incident_type && <p>Tipo sugerido: <strong>{inc.ai_incident_type}</strong></p>}
+                      {inc.ai_reason && <p className="mt-1">{inc.ai_reason}</p>}
+
+                      {inc.ai_reviewed ? (
+                        <div className="mt-2 rounded-md bg-emerald-100 px-2 py-1.5 text-emerald-800">
+                          Revisión humana: <strong>{inc.human_classification?.replace('_', ' ')}</strong>
+                          {inc.human_incident_type && ` · ${inc.human_incident_type}`}
+                        </div>
+                      ) : (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            disabled={reviewingId === inc.id}
+                            onClick={() =>
+                              handleReview(inc, inc.ai_classification!, inc.ai_incident_type_id)
+                            }
+                          >
+                            Confirmar recomendación
+                          </button>
+                          <select
+                            className="field-input text-xs"
+                            defaultValue=""
+                            disabled={reviewingId === inc.id}
+                            onChange={(event) => {
+                              const [classification, typeId] = event.target.value.split(':');
+                              if (!classification) return;
+                              handleReview(
+                                inc,
+                                classification as ClasificacionIncidencia,
+                                typeId ? Number(typeId) : null
+                              );
+                              event.target.value = '';
+                            }}
+                          >
+                            <option value="">Corregir decisión…</option>
+                            <option value="NO_APLICA:">NO APLICA</option>
+                            <option value="REQUIERE_REVISION:">REQUIERE REVISIÓN</option>
+                            {types.map((type) => (
+                              <option key={type.id} value={`APLICA:${type.id}`}>
+                                APLICA · {type.nombre}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!inc.ai_classification && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Pendiente de análisis mediante la acción general de incidencias nuevas.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
                 <select
                   className="field-input"
                   value={inc.estado}
@@ -347,6 +503,7 @@ export default function IncidentsList() {
                     </option>
                   ))}
                 </select>
+                </div>
               </div>
             )}
           </div>

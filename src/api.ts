@@ -1,4 +1,14 @@
-import type { AuthUser, School, Section, IncidentType, Incident, ImportSummary, ManagedUser } from './types';
+import type {
+  AiIncidenceClassification,
+  AuthUser,
+  ClasificacionIncidencia,
+  School,
+  Section,
+  IncidentType,
+  Incident,
+  ImportSummary,
+  ManagedUser,
+} from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -122,6 +132,59 @@ export const api = {
     request<{ id: number }>('/api/incidents', { method: 'POST', body: JSON.stringify(payload) }),
   updateIncident: (id: number, payload: UpdateIncidentPayload) =>
     request<{ incident: Incident }>(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  classifyIncident: (id: number) =>
+    request<{ classification: AiIncidenceClassification }>(`/api/incidents/${id}/classify`, {
+      method: 'POST',
+    }),
+  reviewIncidentClassification: (
+    id: number,
+    payload: {
+      clasificacion: ClasificacionIncidencia;
+      tipoIncidenciaId: number | null;
+      motivo?: string;
+    }
+  ) =>
+    request<{ ok: boolean }>(`/api/incidents/${id}/classification-review`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  bulkClassifyNewIncidents: (filters: IncidentsQuery, afterId = 0) =>
+    request<{
+      processed: number;
+      failed: number;
+      markedNoAplica: number;
+      nextAfterId: number;
+      hasMore: boolean;
+    }>('/api/incidents/bulk-classify-new', {
+      method: 'POST',
+      body: JSON.stringify({ filters, afterId, batchSize: 10 }),
+    }),
+  downloadApplicableNewIncidents: async (filters: IncidentsQuery) => {
+    const entries = Object.entries(filters)
+      .filter(([, value]) => value !== '' && value !== undefined && value !== null)
+      .map(([key, value]) => [key, String(value)] as [string, string]);
+    const response = await fetch(
+      `${API_URL}/api/incidents/export-applicable-new?${new URLSearchParams(entries).toString()}`,
+      { credentials: 'include' }
+    );
+    if (!response.ok) {
+      const data = response.headers.get('content-type')?.includes('application/json')
+        ? await response.json()
+        : null;
+      throw new Error(data?.error || `Error ${response.status}`);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] || 'incidencias-nuevas-aplican.csv';
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  },
 
   importSections: async (file: File): Promise<{ ok: boolean; summary: ImportSummary }> => {
     const formData = new FormData();

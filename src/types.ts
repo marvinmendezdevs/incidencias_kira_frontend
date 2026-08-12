@@ -40,6 +40,15 @@ export interface IncidentType {
 // "no_aplica": para incidencias que no se pueden resolver.
 export type Estado = 'nueva' | 'en_proceso' | 'resuelta' | 'no_aplica';
 export type Prioridad = 'baja' | 'media' | 'alta';
+export type ClasificacionIncidencia = 'APLICA' | 'NO_APLICA' | 'REQUIERE_REVISION';
+
+export interface AiIncidenceClassification {
+  clasificacion: ClasificacionIncidencia;
+  tipoIncidenciaId: number | null;
+  tipoIncidencia: string | null;
+  confianza: number;
+  motivo: string;
+}
 
 export interface Incident {
   id: number;
@@ -69,6 +78,19 @@ export interface Incident {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  ai_classification: ClasificacionIncidencia | null;
+  ai_incident_type_id: number | null;
+  ai_incident_type: string | null;
+  ai_confidence: number | null;
+  ai_reason: string | null;
+  ai_analyzed_at: string | null;
+  ai_model: string | null;
+  ai_reviewed: boolean;
+  human_classification: ClasificacionIncidencia | null;
+  human_incident_type_id: number | null;
+  human_incident_type: string | null;
+  human_reason: string | null;
+  ai_reviewed_at: string | null;
 }
 
 export interface ImportSummary {
