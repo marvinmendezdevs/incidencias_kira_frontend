@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import type { Incident, IncidentType, Estado, Prioridad } from '../types';
-import { ChevronLeftIcon, ChevronRightIcon } from '../components/icons';
+import { AlarmClockIcon, ChevronLeftIcon, ChevronRightIcon } from '../components/icons';
 
 const PAGE_SIZE = 5;
 
@@ -82,6 +83,8 @@ export default function IncidentsList() {
   const [bulkProgress, setBulkProgress] = useState('');
   const [exporting, setExporting] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState({ total: 0, analyzed: 0, pending: 0, ready: false });
+  const [scheduleStatus, setScheduleStatus] = useState<Awaited<ReturnType<typeof api.incidentAnalysisScheduleStatus>> | null>(null);
+  const [mobileScheduleOpen, setMobileScheduleOpen] = useState(false);
 
   // Debounce ref para búsqueda en vivo
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,6 +144,18 @@ export default function IncidentsList() {
     }
   }
 
+  async function handleExcelDownload() {
+    setExporting(true);
+    setError('');
+    try {
+      await api.downloadApplicableNewIncidents({ ...filters, estado: 'nueva' });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleBulkClassify() {
     setBulkAnalyzing(true);
     setError('');
@@ -158,44 +173,15 @@ export default function IncidentsList() {
         noAplica += result.noAplica;
         afterId = result.nextAfterId;
         hasMore = result.hasMore;
-        setBulkProgress(
-          `Analizadas: ${processed} · Resultado No aplica: ${noAplica}${failed ? ` · Errores: ${failed}` : ''}`
-        );
-        if (result.halted) {
-          const retryMessage = result.retryAt
-            ? ` Intenta nuevamente a las ${new Date(result.retryAt).toLocaleTimeString('es-SV', {
-                hour: 'numeric',
-                minute: '2-digit',
-                second: '2-digit',
-              })}.`
-            : '';
-          throw new Error(
-            `${result.errorReason || 'El análisis se detuvo por un error general de Gemini.'}${retryMessage}`
-          );
-        }
+        setBulkProgress(`Analizadas: ${processed} · Resultado No aplica: ${noAplica}${failed ? ` · Errores: ${failed}` : ''}`);
+        if (result.halted) throw new Error(result.errorReason || 'El análisis se detuvo por un error general.');
       } while (hasMore);
       await load(1, filters);
-      setBulkProgress(
-        `Análisis finalizado: ${processed} procesadas; ${noAplica} dieron como resultado No aplica${
-          failed ? ` y ${failed} con error` : ''
-        }.`
-      );
+      setBulkProgress(`Análisis finalizado: ${processed} procesadas; ${noAplica} dieron como resultado No aplica${failed ? ` y ${failed} con error` : ''}.`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBulkAnalyzing(false);
-    }
-  }
-
-  async function handleExcelDownload() {
-    setExporting(true);
-    setError('');
-    try {
-      await api.downloadApplicableNewIncidents({ ...filters, estado: 'nueva' });
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setExporting(false);
     }
   }
 
@@ -209,11 +195,58 @@ export default function IncidentsList() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-primary-dark">
-          Incidencias{' '}
-          <span className="text-base font-normal text-slate-400">({total})</span>
-        </h2>
+      {isAdmin && scheduleStatus && (
+        <>
+        <aside className={`${mobileScheduleOpen ? 'block' : 'hidden'} fixed right-4 top-28 z-30 w-[min(17rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur lg:top-16 lg:block`}>
+          <div className="flex items-center gap-2">
+            <span className={`relative h-2.5 w-2.5 shrink-0 rounded-full ${scheduleStatus.schedule.running ? 'animate-pulse bg-emerald-500' : 'bg-indigo-500'}`} />
+            <p className="flex-1 text-xs font-semibold text-slate-700">
+              {scheduleStatus.schedule.running ? 'Analizando con IA…' : 'Próximo análisis'}
+            </p>
+            <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600">IA</span>
+          </div>
+          <div className="mt-1.5 pl-[18px]">
+            <p className="text-sm font-bold text-slate-800">
+              {scheduleStatus.schedule.enabled
+                ? new Date(scheduleStatus.schedule.nextRunAt).toLocaleString('es-SV', { dateStyle: 'medium', timeStyle: 'short' })
+                : 'Desactivada'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              <strong className="text-emerald-700">{scheduleStatus.totals.analyzed}</strong> analizadas
+              {' · '}
+              <strong className="text-amber-700">{scheduleStatus.totals.pending}</strong> pendientes
+            </p>
+            {scheduleStatus.schedule.lastRunAt && (
+              <p className="mt-1 truncate text-[10px] text-slate-400">
+                Última: {new Date(scheduleStatus.schedule.lastRunAt).toLocaleString('es-SV', { dateStyle: 'short', timeStyle: 'short' })}
+                {' · '}{scheduleStatus.schedule.lastProcessed} procesadas
+              </p>
+            )}
+          </div>
+        </aside>
+        </>
+      )}
+      <div className="relative mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-bold text-primary-dark">
+            Incidencias{' '}
+            <span className="text-base font-normal text-slate-400">({total})</span>
+          </h2>
+          {isAdmin && scheduleStatus && (
+            <button
+              type="button"
+              aria-label="Ver horario del análisis automático"
+              aria-expanded={mobileScheduleOpen}
+              onClick={() => setMobileScheduleOpen((open) => !open)}
+              className="relative flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 transition hover:bg-indigo-100 lg:hidden"
+            >
+              <AlarmClockIcon className="h-4 w-4" />
+              {scheduleStatus.totals.pending > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-amber-500" />
+              )}
+            </button>
+          )}
+        </div>
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
@@ -310,9 +343,15 @@ export default function IncidentsList() {
         </div>
       )}
 
-      {isAdmin && filters.estado === 'nueva' && (
+      {isAdmin && (
         <div className="mb-4 rounded-xl border border-indigo-100 bg-white p-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/admin/resolver-incidencias"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+            >
+              Resolver incidencias
+            </Link>
             <button
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={bulkAnalyzing}
@@ -322,10 +361,10 @@ export default function IncidentsList() {
             </button>
             <button
               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={bulkAnalyzing || exporting || !analysisStatus.ready}
+              disabled={bulkAnalyzing || exporting || analysisStatus.analyzed === 0}
               onClick={handleExcelDownload}
             >
-              {exporting ? 'Generando Excel…' : 'Descargar Excel · Aplican y no aplican'}
+              {exporting ? 'Generando Excel…' : 'Descargar Excel'}
             </button>
           </div>
           {bulkProgress && <p className="mt-2 text-sm text-slate-600">{bulkProgress}</p>}
@@ -334,7 +373,7 @@ export default function IncidentsList() {
             {analysisStatus.pending > 0 && ` · Pendientes: ${analysisStatus.pending}`}
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            El análisis solo informa si aplica o no aplica y por qué; no modifica las incidencias. La descarga se habilita al finalizar todos los registros.
+            El análisis solo informa si aplica o no aplica y por qué; no modifica las incidencias. La descarga se habilita cuando exista al menos una incidencia analizada.
           </p>
         </div>
       )}

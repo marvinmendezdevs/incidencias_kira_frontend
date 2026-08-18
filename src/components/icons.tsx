@@ -100,3 +100,12 @@ export function BookIcon({ className = base }: IconProps) {
     </svg>
   );
 }
+
+export function AlarmClockIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+      <circle cx="12" cy="13" r="7" />
+      <path d="M12 9v4l2.5 1.5M5 3 2.5 5.5M19 3l2.5 2.5M6.5 19 5 21M17.5 19l1.5 2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

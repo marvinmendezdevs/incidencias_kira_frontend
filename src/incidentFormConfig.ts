@@ -30,6 +30,7 @@ export interface IncidentFormConfig {
   destinoPlaceholder?: string;
   contenidoLabel?: string;
   contenidoPlaceholder?: string;
+  examples?: string[];
 }
 
 export const DEFAULT_FORM_CONFIG: IncidentFormConfig = {
@@ -54,8 +55,13 @@ export const FORM_CONFIG_BY_NOMBRE: Record<string, IncidentFormConfig> = {
   'Crear sección': {
     mode: 'simple',
     motivoLabel: 'Describe la sección nueva',
-    motivoPlaceholder: 'Grado, letra, turno y materia(s), y por qué hace falta…',
+    motivoPlaceholder: 'Ej. 10 TÉCNICO ADMINISTRATIVO CONTABLE A Matutino Refuerzo Matemática',
     motivoRequired: true,
+    examples: [
+      'Basica: 4 - - A Matutino Remediación Lenguaje',
+      'Bachilleratos técnicos: 10 TÉCNICO ADMINISTRATIVO CONTABLE A Matutino Refuerzo Matemática',
+      'Bachilleratos Generales: 10 General - A Matutino Refuerzo Matemática',
+    ],
   },
   'Eliminar sección': {
     mode: 'simple',

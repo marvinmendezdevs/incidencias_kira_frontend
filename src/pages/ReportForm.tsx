@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api';
+import type { CreateIncidentPayload } from '../api';
 import { getFormConfig } from '../incidentFormConfig';
 import { ChevronLeftIcon, PlusIcon, TrashIcon, SunIcon, MoonIcon } from '../components/icons';
 import type { IncidentType, IncidentCategoria, School, Section } from '../types';
@@ -52,7 +53,6 @@ export default function ReportForm() {
 
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
   useEffect(() => {
     if (!schoolCode) return;
     api.school(schoolCode).then((data) => setSchool(data.school)).catch(() => setSchool(null));
@@ -181,26 +181,18 @@ export default function ReportForm() {
     return null;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setStatus(null);
-    const validationError = validate();
-    if (validationError) {
-      setStatus({ ok: false, message: validationError });
-      return;
-    }
-
-    let payload = {
+  function buildPayload(): CreateIncidentPayload {
+    const payload: CreateIncidentPayload = {
       incident_type_id: Number(typeId),
       school_code: schoolCode,
       section_id: selectedClass ? selectedClass.id : null,
       descripcion: motivo.trim(),
-      docente_nombre: null as string | null,
-      docente_email: null as string | null,
-      docente_telefono: null as string | null,
-      docente_dui: null as string | null,
-      estudiantes: null as string | null,
-      contenido_detalle: null as string | null,
+      docente_nombre: null,
+      docente_email: null,
+      docente_telefono: null,
+      docente_dui: null,
+      estudiantes: null,
+      contenido_detalle: null,
       prioridad,
     };
 
@@ -232,6 +224,23 @@ export default function ReportForm() {
       default:
         break;
     }
+    return payload;
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus(null);
+    const validationError = validate();
+    if (validationError) {
+      setStatus({ ok: false, message: validationError });
+      return;
+    }
+    /*
+      setStatus({ ok: false, message: 'Consulta primero con el asistente de IA. Solo se enviará si corresponde crear la incidencia.' });
+      return;
+    */
+
+    const payload = buildPayload();
 
     setSubmitting(true);
     try {
@@ -474,6 +483,16 @@ export default function ReportForm() {
                 onChange={(e) => setMotivo(e.target.value)}
                 placeholder={formConfig.motivoPlaceholder}
               />
+              {formConfig.examples && (
+                <span className="mt-2 block rounded-lg border border-sky-100 bg-sky-50 p-3 text-xs font-normal text-slate-600">
+                  <strong className="mb-1 block text-sky-900">Ejemplos del formato esperado:</strong>
+                  {formConfig.examples.map((example) => (
+                    <span key={example} className="block font-mono text-slate-700">
+                      {example}
+                    </span>
+                  ))}
+                </span>
+              )}
             </label>
 
             <label className="field-label mb-4">
@@ -487,10 +506,35 @@ export default function ReportForm() {
           </>
         )}
 
+        {/*
+          <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+            <div className="mb-1 font-semibold text-indigo-900">Asistente para el reportante</div>
+            <p className="mb-3 text-sm text-indigo-800">
+              Consulta si debes crear la incidencia o si puedes resolverla sin enviarla al equipo.
+            </p>
+            <button
+              type="button"
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              disabled={guidanceLoading}
+              onClick={() => undefined}
+            >
+              {guidanceLoading ? 'Consultando IA…' : guidance ? 'Consultar nuevamente' : 'Consultar con IA'}
+            </button>
+            {guidance && (
+              <div className={`mt-3 rounded-lg p-3 text-sm ${guidance.shouldCreate ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-950'}`}>
+                <p className="font-bold">{guidance.message}</p>
+                <p className="mt-1">{guidance.reason}</p>
+                {guidance.suggestedIncidentType && (
+                  <p className="mt-1">Tipo recomendado: <strong>{guidance.suggestedIncidentType}</strong></p>
+                )}
+              </div>
+            )}
+          </div>
+        */}
+
         <button type="submit" className="btn-primary self-start" disabled={submitting || !selectedType}>
           {submitting ? 'Enviando…' : 'Reportar incidencia'}
         </button>
-
         {status && (
           <div className="mt-4">
             <p className={`font-medium ${status.ok ? 'text-green-700' : 'text-red-600'}`}>{status.message}</p>

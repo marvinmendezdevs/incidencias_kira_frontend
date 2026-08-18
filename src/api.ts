@@ -132,6 +132,16 @@ export const api = {
     request<{ id: number }>('/api/incidents', { method: 'POST', body: JSON.stringify(payload) }),
   updateIncident: (id: number, payload: UpdateIncidentPayload) =>
     request<{ incident: Incident }>(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  incidentsByIds: (ids: number[]) =>
+    request<{ incidents: Incident[]; missingIds: number[] }>('/api/incidents/by-ids', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  updateIncidentsStatus: (ids: number[], estado: 'en_proceso' | 'resuelta' | 'no_aplica') =>
+    request<{ updated: number }>('/api/incidents/bulk-status', {
+      method: 'PATCH',
+      body: JSON.stringify({ ids, estado }),
+    }),
   classifyIncident: (id: number) =>
     request<{ classification: AiIncidenceClassification }>(`/api/incidents/${id}/classify`, {
       method: 'POST',
@@ -170,6 +180,20 @@ export const api = {
       `/api/incidents/analysis-status?${new URLSearchParams(entries).toString()}`
     );
   },
+  incidentAnalysisScheduleStatus: () =>
+    request<{
+      schedule: {
+        enabled: boolean;
+        running: boolean;
+        nextRunAt: string;
+        lastRunAt: string | null;
+        lastProcessed: number;
+        lastFailed: number;
+        timeZone: string;
+        scheduledHour: string;
+      };
+      totals: { total: number; analyzed: number; pending: number };
+    }>('/api/incidents/analysis-schedule-status'),
   downloadApplicableNewIncidents: async (filters: IncidentsQuery) => {
     const entries = Object.entries(filters)
       .filter(([, value]) => value !== '' && value !== undefined && value !== null)

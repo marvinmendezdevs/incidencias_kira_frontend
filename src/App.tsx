@@ -9,6 +9,7 @@ import IncidentsList from './pages/IncidentsList';
 import AdminImport from './pages/AdminImport';
 import IncidentTypesAdmin from './pages/IncidentTypesAdmin';
 import UsersAdmin from './pages/UsersAdmin';
+import ResolveIncidents from './pages/ResolveIncidents';
 
 function LoginScreen() {
   const { loginWithGoogle } = useAuth();
@@ -127,6 +128,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <UsersAdmin />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/resolver-incidencias"
+          element={
+            <RequireAdmin>
+              <ResolveIncidents />
             </RequireAdmin>
           }
         />
