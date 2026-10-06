@@ -12,15 +12,58 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
+// Token de sesion guardado en el navegador y enviado como
+// "Authorization: Bearer <token>". Frontend y backend estan en dominios
+// distintos, asi que la cookie de sesion es "de terceros" y algunos
+// navegadores la bloquean (Chrome con cookies de terceros bloqueadas o
+// perfiles administrados, Safari, Brave, incognito). Sin esto, el login
+// parecia funcionar pero luego todo respondia 401 y la busqueda de centros
+// escolares salia vacia. La cookie se sigue enviando como respaldo.
+const TOKEN_KEY = 'incidencias_token';
+export const SESSION_EXPIRED_EVENT = 'incidencias:session-expired';
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Si el navegador no permite localStorage, queda solo la cookie.
+  }
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// Si el backend responde 401 la sesion ya no sirve: se borra el token y se
+// avisa a AuthContext para volver a la pantalla de login, en vez de mostrar
+// resultados vacios como si no hubiera datos.
+function handleUnauthorized(res: Response, path: string): void {
+  if (res.status === 401 && path !== '/api/auth/google') {
+    setAuthToken(null);
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(options.headers || {}) },
   });
   const isJson = res.headers.get('content-type')?.includes('application/json');
   const data = isJson ? await res.json() : null;
   if (!res.ok) {
+    handleUnauthorized(res, path);
     const message = (data && data.error) || `Error ${res.status}`;
     throw new Error(message);
   }
@@ -72,7 +115,7 @@ export interface AdminUsersQuery {
 export const api = {
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
   loginWithGoogle: (idToken: string) =>
-    request<{ user: AuthUser }>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
+    request<{ user: AuthUser; token?: string }>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
   schools: (q = '', page = 1, pageSize = 20) =>
@@ -158,7 +201,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  bulkClassifyNewIncidents: (filters: IncidentsQuery, afterId = 0) =>
+  bulkClassifyNewIncidents: (filters: IncidentsQuery, afterId = 0, runId?: string) =>
     request<{
       processed: number;
       failed: number;
@@ -168,15 +211,19 @@ export const api = {
       halted: boolean;
       errorReason: string | null;
       retryAt: string | null;
+      runId: string;
     }>('/api/incidents/bulk-classify-new', {
       method: 'POST',
-      body: JSON.stringify({ filters, afterId, batchSize: 10 }),
+      body: JSON.stringify({ filters, afterId, runId, batchSize: 10 }),
     }),
   incidentAnalysisStatus: (filters: IncidentsQuery) => {
     const entries = Object.entries(filters)
       .filter(([, value]) => value !== '' && value !== undefined && value !== null)
       .map(([key, value]) => [key, String(value)] as [string, string]);
-    return request<{ total: number; analyzed: number; pending: number; ready: boolean }>(
+    return request<{
+      total: number; analyzed: number; pending: number; ready: boolean;
+      minimumPending: number; executionsToday: number; dailyLimit: number; remainingExecutions: number;
+    }>(
       `/api/incidents/analysis-status?${new URLSearchParams(entries).toString()}`
     );
   },
@@ -200,9 +247,10 @@ export const api = {
       .map(([key, value]) => [key, String(value)] as [string, string]);
     const response = await fetch(
       `${API_URL}/api/incidents/export-applicable-new?${new URLSearchParams(entries).toString()}`,
-      { credentials: 'include' }
+      { credentials: 'include', headers: authHeaders() }
     );
     if (!response.ok) {
+      handleUnauthorized(response, '/api/incidents/export-applicable-new');
       const data = response.headers.get('content-type')?.includes('application/json')
         ? await response.json()
         : null;
@@ -227,9 +275,11 @@ export const api = {
     const res = await fetch(`${API_URL}/api/admin/sections/import`, {
       method: 'POST',
       credentials: 'include',
+      headers: authHeaders(),
       body: formData,
     });
     const data = await res.json();
+    if (!res.ok) handleUnauthorized(res, '/api/admin/sections/import');
     if (!res.ok) throw new Error(data.error || 'Error al importar.');
     return data;
   },

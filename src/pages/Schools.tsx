@@ -13,6 +13,7 @@ export default function Schools() {
   const [schools, setSchools] = useState<School[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Si cambia la busqueda, siempre volvemos a la pagina 1 (si no, se puede
   // quedar "atascado" en una pagina que ya no existe para el nuevo filtro).
@@ -22,16 +23,34 @@ export default function Schools() {
 
   useEffect(() => {
     setLoading(true);
+    setError('');
+    // "cancelled" evita que una respuesta vieja (de lo que se escribio antes)
+    // llegue tarde y reemplace los resultados de la busqueda actual.
+    let cancelled = false;
     const handle = setTimeout(() => {
       api
         .schools(query, page, PAGE_SIZE)
         .then((data) => {
+          if (cancelled) return;
           setSchools(data.schools);
           setTotal(data.total);
         })
-        .finally(() => setLoading(false));
+        .catch(() => {
+          if (cancelled) return;
+          // Antes el error se perdia y se mostraba "No se encontraron
+          // centros escolares", como si la busqueda no tuviera resultados.
+          setSchools([]);
+          setTotal(0);
+          setError('Ocurrió un problema al cargar los centros escolares. Intenta de nuevo en unos momentos.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     }, 250);
-    return () => clearTimeout(handle);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [query, page]);
 
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
@@ -87,7 +106,19 @@ export default function Schools() {
         </div>
       )}
 
-      {!loading && schools.length === 0 && (
+      {!loading && error && (
+        <div className="mx-auto max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-center text-red-700">
+          <p className="font-medium">{error}</p>
+          <button
+            className="mt-3 rounded-full border border-red-200 bg-white px-4 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100"
+            onClick={() => window.location.reload()}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && schools.length === 0 && (
         <p className="text-center text-slate-500">No se encontraron centros escolares con ese criterio.</p>
       )}
 

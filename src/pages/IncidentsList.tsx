@@ -82,7 +82,10 @@ export default function IncidentsList() {
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState('');
   const [exporting, setExporting] = useState(false);
-  const [analysisStatus, setAnalysisStatus] = useState({ total: 0, analyzed: 0, pending: 0, ready: false });
+  const [analysisStatus, setAnalysisStatus] = useState({
+    total: 0, analyzed: 0, pending: 0, ready: false,
+    minimumPending: 50, executionsToday: 0, dailyLimit: 3, remainingExecutions: 3,
+  });
   const [scheduleStatus, setScheduleStatus] = useState<Awaited<ReturnType<typeof api.incidentAnalysisScheduleStatus>> | null>(null);
   const [mobileScheduleOpen, setMobileScheduleOpen] = useState(false);
 
@@ -107,7 +110,7 @@ export default function IncidentsList() {
         api.incidents({ ...currentFilters, page: pageToLoad, pageSize: PAGE_SIZE }),
         isAdmin
           ? api.incidentAnalysisStatus({ ...currentFilters, estado: 'nueva' })
-          : Promise.resolve({ total: 0, analyzed: 0, pending: 0, ready: false }),
+          : Promise.resolve({ total: 0, analyzed: 0, pending: 0, ready: false, minimumPending: 50, executionsToday: 0, dailyLimit: 3, remainingExecutions: 3 }),
       ]);
       setIncidents(data.incidents);
       setTotal(data.total);
@@ -164,10 +167,12 @@ export default function IncidentsList() {
     let processed = 0;
     let failed = 0;
     let noAplica = 0;
+    let runId: string | undefined;
     try {
       let hasMore = false;
       do {
-        const result = await api.bulkClassifyNewIncidents({ ...filters, estado: 'nueva' }, afterId);
+        const result = await api.bulkClassifyNewIncidents({ ...filters, estado: 'nueva' }, afterId, runId);
+        runId = result.runId;
         processed += result.processed;
         failed += result.failed;
         noAplica += result.noAplica;
@@ -192,6 +197,7 @@ export default function IncidentsList() {
 
   const hasActiveFilters = Object.values(filters).some((v) => v !== '');
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
+  const canStartBulkAnalysis = analysisStatus.pending >= analysisStatus.minimumPending && analysisStatus.remainingExecutions > 0;
 
   return (
     <div>
@@ -354,8 +360,13 @@ export default function IncidentsList() {
             </Link>
             <button
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={bulkAnalyzing}
+              disabled={bulkAnalyzing || !canStartBulkAnalysis}
               onClick={handleBulkClassify}
+              title={!canStartBulkAnalysis
+                ? analysisStatus.remainingExecutions === 0
+                  ? `Ya se usaron las ${analysisStatus.dailyLimit} ejecuciones disponibles hoy.`
+                  : `Se requieren al menos ${analysisStatus.minimumPending} incidencias nuevas pendientes.`
+                : undefined}
             >
               {bulkAnalyzing ? 'Analizando nuevas…' : 'Analizar todas las nuevas con IA'}
             </button>
@@ -369,9 +380,13 @@ export default function IncidentsList() {
           </div>
           {bulkProgress && <p className="mt-2 text-sm text-slate-600">{bulkProgress}</p>}
           <p className="mt-2 text-sm text-slate-600">
-            Analizadas: {analysisStatus.analyzed} de {analysisStatus.total}
-            {analysisStatus.pending > 0 && ` · Pendientes: ${analysisStatus.pending}`}
-          </p>
+              Analizadas: {analysisStatus.analyzed} de {analysisStatus.total}
+              {analysisStatus.pending > 0 && ` · Pendientes: ${analysisStatus.pending}`}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Intentos restantes para analizar: <strong>{analysisStatus.remainingExecutions}</strong> en el día
+              {' · '}Mínimo para ejecutar: {analysisStatus.minimumPending} pendientes.
+            </p>
           <p className="mt-1 text-xs text-slate-400">
             El análisis solo informa si aplica o no aplica y por qué; no modifica las incidencias. La descarga se habilita cuando exista al menos una incidencia analizada.
           </p>

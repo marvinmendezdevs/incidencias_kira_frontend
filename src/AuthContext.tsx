@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api } from './api';
+import { api, setAuthToken, SESSION_EXPIRED_EVENT } from './api';
 import type { AuthUser } from './types';
 
 interface AuthContextValue {
@@ -24,14 +24,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // api.ts dispara este evento cuando el backend responde 401 (sesion
+  // perdida o expirada): se vuelve a la pantalla de login.
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
+
   async function loginWithGoogle(idToken: string) {
     const data = await api.loginWithGoogle(idToken);
+    setAuthToken(data.token || null);
     setUser(data.user);
   }
 
   async function logout() {
-    await api.logout();
-    setUser(null);
+    try {
+      await api.logout();
+    } finally {
+      setAuthToken(null);
+      setUser(null);
+    }
   }
 
   const isAdmin = user?.role === 'administrador';
